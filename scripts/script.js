@@ -3,6 +3,7 @@
 class Workout {
   date = new Date();
   id = (Date.now() + "").slice(-10);
+
   clicks = 0;
   constructor(coords, distance, duration) {
     // this.date = ...
@@ -56,7 +57,6 @@ class Cycling extends Workout {
 // const run1 = new Running([50 , 30] , 5 , 20 , 174)
 // const cycling1 = new Cycling([55 , 45] , 9 , 10 , 317)
 
-
 ////////////////////////////
 // APPLICATION ARCHITECTURE
 const form = document.querySelector(".form");
@@ -72,6 +72,8 @@ class App {
   #mapZoomLevel = 13;
   #mapEvent;
   #workouts = [];
+  #markers = [];
+  #editing = false;
 
   constructor() {
     // Get user's position
@@ -83,11 +85,16 @@ class App {
     // Attach event handlers
     form.addEventListener("submit", this._newWorkout.bind(this));
 
-    inputType.addEventListener("change", this._toggleElevationField);
+    inputType.addEventListener("change", this._toggleElevationField.bind(this));
 
-    containerWorkouts.addEventListener("click", this._moveToPopup.bind(this));
+    containerWorkouts.addEventListener(
+      "click",
+      this._handleClickOnContainerWorkouts.bind(this)
+    );
   }
-
+  _hideElement(el) {
+    el.classList.add("hidden");
+  }
   _getPosition() {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -102,7 +109,6 @@ class App {
   _loadMap(position) {
     const { latitude } = position.coords;
     const { longitude } = position.coords;
- 
 
     const coords = [latitude, longitude];
 
@@ -141,10 +147,21 @@ class App {
   }
 
   _toggleElevationField() {
-    inputElevation.closest(".form__row").classList.toggle("form__row--hidden");
-    inputCadence.closest(".form__row").classList.toggle("form__row--hidden");
+    this._setFormTypeTo(inputType.value);
   }
-
+  _setFormTypeTo(type) {
+    inputType.value = type;
+    if (type === "running") {
+      inputElevation.closest(".form__row").classList.add("form__row--hidden");
+      inputCadence.closest(".form__row").classList.remove("form__row--hidden");
+    }
+    if (type === "cycling") {
+      inputElevation
+        .closest(".form__row")
+        .classList.remove("form__row--hidden");
+      inputCadence.closest(".form__row").classList.add("form__row--hidden");
+    }
+  }
   _newWorkout(e) {
     // Helper functions
 
@@ -161,6 +178,7 @@ class App {
     const type = inputType.value;
     const distance = +inputDistance.value;
     const duration = +inputDuration.value;
+
     const { lat, lng } = this.#mapEvent.latlng;
 
     let workout;
@@ -189,8 +207,12 @@ class App {
       workout = new Cycling([lat, lng], distance, duration, elevation);
     }
     // Add new object to the workout array
+    if(this.#editing){
+      const editingWorkoutIndex = this.#workouts.indexOf("editing");
+      this.#workouts[editingWorkoutIndex] = workout;
+    }else{
     this.#workouts.push(workout);
-
+    }
     // Render workout on the map as a marker
     this._renderWorkoutMarker(workout);
 
@@ -198,12 +220,24 @@ class App {
     this._renderWorkout(workout);
     // Hide form + clear fields
     this._hideForm();
+    // set editing to false
+    this.#editing = false;
+    
     // Set local storage to all workouts
     this._setLocalStorage();
   }
-
+  _setWorkoutToEditing(workout) {
+    const workoutIndex = this.#workouts.indexOf(workout);
+    this.#workouts[workoutIndex] = "editing";
+    
+  }
   _renderWorkoutMarker(workout) {
-    L.marker(workout.coords)
+    const workoutIndex = this.#workouts.indexOf(workout);
+    if(this.#editing){ 
+      this.#map.removeLayer(this.#markers[workoutIndex]);
+    }
+ 
+     this.#markers[workoutIndex]=  L.marker(workout.coords)
       .addTo(this.#map)
       .bindPopup(
         L.popup({
@@ -218,12 +252,21 @@ class App {
         })
       )
       .openPopup();
-  }
 
+
+  }
+  _findWorkoutObj(workoutEl) {
+    return this.#workouts.find(
+      (workout) => workout.id === workoutEl.dataset.id
+    );
+  }
   _renderWorkout(workout) {
     let html = `
     <li class="workout workout--${workout.type}" data-id="${workout.id}">
     <h2 class="workout__title">${workout.description}</h2>
+    <button class="workout__edit">
+    edit 📝
+    </button>
     <div class="workout__details">
       <span class="workout__icon">${
         workout.type === "running" ? "🏃‍♂️" : "🚴‍♀️"
@@ -271,16 +314,47 @@ class App {
 
     form.insertAdjacentHTML("afterend", html);
   }
-
-  _moveToPopup(e) {
-    const workoutEl = e.target.closest(".workout");
-  
+  _handleClickOnContainerWorkouts(e) {
+    const target = e.target;
+    const workoutEl = target.closest(".workout");
     if (!workoutEl) return;
+    if (target.classList.contains("workout__edit") ) {
+      this._eidtWorkout(workoutEl);
+      return;
+    }
+    this._moveToPopup(workoutEl);
+  }
+  _eidtWorkout(workoutEl) {
+    if(this.#editing) 
+    {
+      alert("You're editing another wokrout")
+    return;
+    }
+    this.#editing = true;
+    this._hideElement(workoutEl);
 
-    const workout = this.#workouts.find(
-      (workout) => workout.id === workoutEl.dataset.id
-    );
+    const workout = this._findWorkoutObj(workoutEl);
+    // Delete workout from workouts array
+    this._deleteWorkout(workout);
+    // Show form
 
+    form.classList.remove("hidden");
+    // Put workouts data into form
+    this._setFormTypeTo(workout.type);
+    inputDistance.value = workout.distance;
+    inputDuration.value = workout.duration;
+    if (workout.type === "running") {
+      inputCadence.value = workout.cadence;
+    }
+    if (workout.type === "cycling") {
+      inputElevation.value = workout.elevationGain;
+    }
+    this.#mapEvent = {
+      latlng: { lat: workout.coords[0], lng: workout.coords[1] },
+    };
+  }
+  _moveToPopup(workoutEl) {
+    const workout = this._findWorkoutObj(workoutEl);
     this.#map.setView(workout.coords, this.#mapZoomLevel + 3, {
       animate: true,
       duration: 2,
@@ -290,22 +364,23 @@ class App {
     // workout.click();
   }
   _setLocalStorage() {
+    
     localStorage.setItem("workouts", JSON.stringify(this.#workouts));
   }
   _getLocalStorage() {
     const data = JSON.parse(localStorage.getItem("workouts"));
 
     if (!data) return;
-    
+
     this.#workouts = data;
 
     this.#workouts.forEach((workout) => {
       this._renderWorkout(workout);
     });
   }
-  reset(){
+  reset() {
     localStorage.removeItem("workouts");
-    location.reload()
+    location.reload();
   }
 }
 
