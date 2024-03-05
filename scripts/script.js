@@ -335,7 +335,7 @@ class App {
 
     const workout = this._findWorkoutObj(workoutEl);
     // Delete workout from workouts array
-    this._deleteWorkout(workout);
+    this._setWorkoutToEditing(workout);
     // Show form
 
     form.classList.remove("hidden");
