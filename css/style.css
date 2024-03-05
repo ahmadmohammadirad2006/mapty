@@ -40,6 +40,10 @@ a:visited {
   color: var(--color-brand--1);
 }
 
+.hidden{
+  display: none !important; 
+}
+
 /* SIDEBAR */
 .sidebar {
   flex-basis: 50rem;
@@ -87,9 +91,23 @@ a:visited {
 .workout__title {
   font-size: 1.7rem;
   font-weight: 600;
-  grid-column: 1 / -1;
+  grid-column: 1 / -2;
 }
 
+.workout__edit{
+  font-size: 1.5rem;
+ background-color: transparent;
+ border: none;
+ color: inherit;
+  grid-column: 4 / -1;
+  cursor: pointer;
+  transition: opacity .2s;
+  text-align: right;
+}
+.workout__edit:hover{
+  opacity: .7;
+
+}
 .workout__details {
   display: flex;
   align-items: baseline;
